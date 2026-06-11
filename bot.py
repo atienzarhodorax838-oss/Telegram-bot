@@ -19,7 +19,7 @@ import base64
 # ==================== Railway 环境配置 ====================
 # 获取 Railway 提供的持久化存储路径
 RAILWAY_VOLUME = os.environ.get('RAILWAY_VOLUME_MOUNT_PATH', '/app/data')
-DATA_DIR = Path(RAILWAY_VOLUME) if os.path.exists(RAILWAY_VOLUME) else Path('/app/data')
+DATA_DIR = Path(RAILWAY_VOLUME)
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 # 日志目录
@@ -69,32 +69,21 @@ print(f"日志目录: {LOG_DIR}")
 print("=" * 70)
 print()
 
-# ==================== 配置区域（从环境变量读取） ====================
-BOT_TOKEN = os.environ.get('BOT_TOKEN', '')
-API_ID = int(os.environ.get('API_ID', 0))
-API_HASH = os.environ.get('API_HASH', '')
+# ==================== 配置区域 ====================
+BOT_TOKEN = "8660734460:AAGfm9fjtu2ZaJMRKtvAlPTbyzD7qKGIBtA"
+API_ID = 33059943
+API_HASH = '1c73a0510ba0b8cb3bd16f24acfd62bf'
 PROXY = None
 USE_PROXY_ROTATOR = False
 
 # 频道验证配置
-REQUIRED_CHANNEL = os.environ.get('REQUIRED_CHANNEL', '@APl57')
-REQUIRED_CHANNEL_ID = int(os.environ.get('REQUIRED_CHANNEL_ID', -1003389230091))
-ADMIN_ID = int(os.environ.get('ADMIN_ID', 0))
+REQUIRED_CHANNEL = "@APl57"
+REQUIRED_CHANNEL_ID = -1003389230091
+ADMIN_ID = 7002638062
 
 # 用户最大并发任务数
-MAX_TASKS_PER_USER = int(os.environ.get('MAX_TASKS_PER_USER', 3))
-MAX_CONCURRENT_TASKS = int(os.environ.get('MAX_CONCURRENT_TASKS', 15))
-
-# 验证配置是否完整
-if not BOT_TOKEN:
-    print("❌ 错误: BOT_TOKEN 未设置！请在 Railway 环境变量中配置。")
-    sys.exit(1)
-if not API_ID or not API_HASH:
-    print("❌ 错误: API_ID 或 API_HASH 未设置！请在 Railway 环境变量中配置。")
-    sys.exit(1)
-if not ADMIN_ID:
-    print("❌ 错误: ADMIN_ID 未设置！请在 Railway 环境变量中配置。")
-    sys.exit(1)
+MAX_TASKS_PER_USER = 3
+MAX_CONCURRENT_TASKS = 15
 
 # 状态定义
 PHONE_NUMBER = 1
@@ -1173,7 +1162,6 @@ async def handle_secure_callback(update: Update, context: ContextTypes.DEFAULT_T
         return
     
     elif action_code == "vl":
-        # 发送日志文件
         if log_filename.exists():
             try:
                 with open(log_filename, 'rb') as f:
@@ -1556,14 +1544,6 @@ def create_add_task_conversation():
         per_user=True,
         per_message=False
     )
-
-# ==================== 健康检查接口 (为 Railway 准备) ====================
-async def health_check():
-    """简单的健康检查"""
-    while True:
-        await asyncio.sleep(30)
-        # 可以在这里添加一些健康检查逻辑
-        print_log("Heartbeat: Bot is running", "DEBUG")
 
 # ==================== 主函数 ====================
 async def shutdown(application: Application):
