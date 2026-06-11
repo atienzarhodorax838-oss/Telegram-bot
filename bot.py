@@ -16,13 +16,21 @@ import hashlib
 import secrets
 import base64
 
+# ==================== Railway 环境配置 ====================
+# 获取 Railway 提供的持久化存储路径
+RAILWAY_VOLUME = os.environ.get('RAILWAY_VOLUME_MOUNT_PATH', '/app/data')
+DATA_DIR = Path(RAILWAY_VOLUME) if os.path.exists(RAILWAY_VOLUME) else Path('/app/data')
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+# 日志目录
+LOG_DIR = DATA_DIR / 'logs'
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+
 # ==================== 控制台输出重定向到文件 ====================
 class TeeLogger:
     def __init__(self, filename):
         self.terminal = sys.stdout
-        log_dir = Path("/storage/emulated/0/TelegramBomb")
-        log_dir.mkdir(parents=True, exist_ok=True)
-        self.log_file = open(log_dir / filename, 'a', encoding='utf-8')
+        self.log_file = open(filename, 'a', encoding='utf-8')
         
     def write(self, message):
         self.terminal.write(message)
@@ -36,9 +44,7 @@ class TeeLogger:
 class TeeErrorLogger:
     def __init__(self, filename):
         self.terminal = sys.stderr
-        log_dir = Path("/storage/emulated/0/TelegramBomb")
-        log_dir.mkdir(parents=True, exist_ok=True)
-        self.log_file = open(log_dir / filename, 'a', encoding='utf-8')
+        self.log_file = open(filename, 'a', encoding='utf-8')
         
     def write(self, message):
         self.terminal.write(message)
@@ -50,40 +56,52 @@ class TeeErrorLogger:
         self.log_file.flush()
 
 start_time_log = datetime.now().strftime("%Y%m%d_%H%M%S")
-log_filename = f"bomb_console_{start_time_log}.txt"
-error_log_filename = f"bomb_error_{start_time_log}.txt"
+log_filename = LOG_DIR / f"bomb_console_{start_time_log}.txt"
+error_log_filename = LOG_DIR / f"bomb_error_{start_time_log}.txt"
 
 sys.stdout = TeeLogger(log_filename)
 sys.stderr = TeeErrorLogger(error_log_filename)
 
 print("=" * 70)
 print(f"轰炸机器人启动时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-print(f"控制台日志文件: /storage/emulated/0/TelegramBomb/{log_filename}")
+print(f"数据目录: {DATA_DIR}")
+print(f"日志目录: {LOG_DIR}")
 print("=" * 70)
 print()
 
-# ==================== 配置区域 ====================
-BOT_TOKEN = "8660734460:AAGfm9fjtu2ZaJMRKtvAlPTbyzD7qKGIBtA"
-API_ID = 33059943
-API_HASH = '1c73a0510ba0b8cb3bd16f24acfd62bf'
+# ==================== 配置区域（从环境变量读取） ====================
+BOT_TOKEN = os.environ.get('BOT_TOKEN', '')
+API_ID = int(os.environ.get('API_ID', 0))
+API_HASH = os.environ.get('API_HASH', '')
 PROXY = None
 USE_PROXY_ROTATOR = False
 
 # 频道验证配置
-REQUIRED_CHANNEL = "@APl57"
-REQUIRED_CHANNEL_ID = -1003389230091
-ADMIN_ID = 7002638062
+REQUIRED_CHANNEL = os.environ.get('REQUIRED_CHANNEL', '@APl57')
+REQUIRED_CHANNEL_ID = int(os.environ.get('REQUIRED_CHANNEL_ID', -1003389230091))
+ADMIN_ID = int(os.environ.get('ADMIN_ID', 0))
 
 # 用户最大并发任务数
-MAX_TASKS_PER_USER = 3
-MAX_CONCURRENT_TASKS = 15
+MAX_TASKS_PER_USER = int(os.environ.get('MAX_TASKS_PER_USER', 3))
+MAX_CONCURRENT_TASKS = int(os.environ.get('MAX_CONCURRENT_TASKS', 15))
+
+# 验证配置是否完整
+if not BOT_TOKEN:
+    print("❌ 错误: BOT_TOKEN 未设置！请在 Railway 环境变量中配置。")
+    sys.exit(1)
+if not API_ID or not API_HASH:
+    print("❌ 错误: API_ID 或 API_HASH 未设置！请在 Railway 环境变量中配置。")
+    sys.exit(1)
+if not ADMIN_ID:
+    print("❌ 错误: ADMIN_ID 未设置！请在 Railway 环境变量中配置。")
+    sys.exit(1)
 
 # 状态定义
 PHONE_NUMBER = 1
 
 # 存储被禁用的用户
 banned_users: Set[int] = set()
-BANNED_USERS_FILE = "/storage/emulated/0/TelegramBomb/banned_users.json"
+BANNED_USERS_FILE = DATA_DIR / "banned_users.json"
 
 # 任务存储结构: task_id -> TaskData
 class TaskData:
@@ -193,7 +211,7 @@ _panel_messages_lock = asyncio.Lock()
 
 # 用户使用记录
 user_usage: Dict[int, Dict] = {}
-USER_USAGE_FILE = "/storage/emulated/0/TelegramBomb/user_usage.json"
+USER_USAGE_FILE = DATA_DIR / "user_usage.json"
 
 # 全局应用实例
 application = None
@@ -364,7 +382,7 @@ async def update_panel(user_id: int, context: ContextTypes.DEFAULT_TYPE):
 def load_banned_users():
     global banned_users
     try:
-        if os.path.exists(BANNED_USERS_FILE):
+        if BANNED_USERS_FILE.exists():
             with open(BANNED_USERS_FILE, 'r', encoding='utf-8') as f:
                 data = json.load(f)
                 banned_users = set(data.get("banned_users", []))
@@ -383,7 +401,7 @@ def save_banned_users():
 def load_user_usage():
     global user_usage
     try:
-        if os.path.exists(USER_USAGE_FILE):
+        if USER_USAGE_FILE.exists():
             with open(USER_USAGE_FILE, 'r', encoding='utf-8') as f:
                 user_usage = json.load(f)
                 user_usage = {int(k): v for k, v in user_usage.items()}
@@ -401,7 +419,7 @@ def save_user_usage():
 async def save_user_tasks():
     """保存用户任务列表"""
     try:
-        tasks_file = "/storage/emulated/0/TelegramBomb/user_tasks.json"
+        tasks_file = DATA_DIR / "user_tasks.json"
         async with _user_tasks_lock:
             data = {str(k): v for k, v in user_tasks.items()}
         with open(tasks_file, 'w', encoding='utf-8') as f:
@@ -414,8 +432,8 @@ def load_user_tasks():
     """加载用户任务列表"""
     global user_tasks
     try:
-        tasks_file = "/storage/emulated/0/TelegramBomb/user_tasks.json"
-        if os.path.exists(tasks_file):
+        tasks_file = DATA_DIR / "user_tasks.json"
+        if tasks_file.exists():
             with open(tasks_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
                 user_tasks = {int(k): v for k, v in data.items()}
@@ -426,7 +444,7 @@ def load_user_tasks():
 async def save_active_tasks():
     """保存活跃任务信息（用于恢复）"""
     try:
-        tasks_data_file = "/storage/emulated/0/TelegramBomb/active_tasks.json"
+        tasks_data_file = DATA_DIR / "active_tasks.json"
         data = {}
         async with _tasks_lock:
             for task_id, task_data in active_tasks.items():
@@ -1155,10 +1173,10 @@ async def handle_secure_callback(update: Update, context: ContextTypes.DEFAULT_T
         return
     
     elif action_code == "vl":
-        log_path = Path(f"/storage/emulated/0/TelegramBomb/{log_filename}")
-        if log_path.exists():
+        # 发送日志文件
+        if log_filename.exists():
             try:
-                with open(log_path, 'rb') as f:
+                with open(log_filename, 'rb') as f:
                     await context.bot.send_document(
                         chat_id=user_id,
                         document=f,
@@ -1235,8 +1253,8 @@ async def handle_secure_callback(update: Update, context: ContextTypes.DEFAULT_T
             f"• 总请求: {stats['total_requests']}\n"
             f"• 成功: {stats['total_success']} | 失败: {stats['total_fails']}\n"
             f"⏰ 运行时间: {(datetime.now() - stats['start_time']).total_seconds()/3600:.1f} 小时\n\n"
-            f"📁 日志目录: /storage/emulated/0/TelegramBomb/\n"
-            f"📄 当前日志: {log_filename}"
+            f"📁 数据目录: {DATA_DIR}\n"
+            f"📄 当前日志: {log_filename.name}"
         )
         
         stats_text += task_details
@@ -1539,6 +1557,14 @@ def create_add_task_conversation():
         per_message=False
     )
 
+# ==================== 健康检查接口 (为 Railway 准备) ====================
+async def health_check():
+    """简单的健康检查"""
+    while True:
+        await asyncio.sleep(30)
+        # 可以在这里添加一些健康检查逻辑
+        print_log("Heartbeat: Bot is running", "DEBUG")
+
 # ==================== 主函数 ====================
 async def shutdown(application: Application):
     print_log("正在关闭机器人...", "WARNING")
@@ -1561,9 +1587,9 @@ def main():
     global application
     
     print_log("=" * 70)
-    print_log("💣 Telegram 验证码轰炸机启动 - 多用户隔离版 v2.1")
-    print_log(f"📁 日志路径: /storage/emulated/0/TelegramBomb/")
-    print_log(f"📄 日志文件: {log_filename}")
+    print_log("💣 Telegram 验证码轰炸机启动 - Railway 部署版 v3.0")
+    print_log(f"📁 数据目录: {DATA_DIR}")
+    print_log(f"📁 日志目录: {LOG_DIR}")
     print_log(f"⚡ 用户最大并发: {MAX_TASKS_PER_USER}")
     print_log(f"⚡ 系统最大并发: {MAX_CONCURRENT_TASKS}")
     print_log(f"🔒 必需频道: {REQUIRED_CHANNEL}")
@@ -1596,8 +1622,8 @@ def main():
         application.add_handler(CommandHandler("unfd", unfd_command))
         application.add_handler(CommandHandler("gfhl", gfhl_command))
         application.add_handler(CommandHandler("stats_all", stats_all_command))
-        application.add_handler(CommandHandler("dz", dz_command))  # 新增
-        application.add_handler(CommandHandler("tz", tz_command))  # 新增
+        application.add_handler(CommandHandler("dz", dz_command))
+        application.add_handler(CommandHandler("tz", tz_command))
         
         # 添加任务会话处理器
         application.add_handler(create_add_task_conversation())
